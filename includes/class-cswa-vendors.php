@@ -275,7 +275,7 @@ class CSWA_Vendors {
 		echo '<p>JPEG, PNG ou WebP : 5 Mo et 25 mégapixels maximum par photo. Ajoutez uniquement des photos de votre boutique destinées à être partagées : leurs liens directs peuvent être accessibles.</p>';
 		foreach ( array( 'facebook' => 'Facebook', 'instagram' => 'Instagram' ) as $field => $label ) {
 			$value = $id ? get_user_meta( $id, '_cswa_' . $field, true ) : '';
-			echo '<label>Lien ' . esc_html( $label ) . ' de la boutique (facultatif)<input type="url" name="' . esc_attr( $field ) . '" maxlength="2048" placeholder="https://www.' . esc_attr( $field ) . '.com/votre-boutique" value="' . esc_attr( $value ) . '"></label>';
+			echo '<label class="csv-field-half">Lien ' . esc_html( $label ) . ' de la boutique (facultatif)<input type="url" name="' . esc_attr( $field ) . '" maxlength="2048" placeholder="https://www.' . esc_attr( $field ) . '.com/votre-boutique" value="' . esc_attr( $value ) . '"></label>';
 		}
 	}
 

@@ -4,16 +4,16 @@
 <?php if ( is_user_logged_in() ) : ?><a href="<?php echo esc_url( wp_logout_url( CSWA_Vendors::portal_url() ) ); ?>">Se déconnecter</a><?php endif; ?></header>
 <?php if ( ! empty( $_GET['cswa_message'] ) ) : ?><p class="csv-notice" role="status"><?php echo esc_html( mb_substr( sanitize_text_field( wp_unslash( $_GET['cswa_message'] ) ), 0, 500 ) ); ?></p><?php endif; ?>
 <?php if ( ! is_user_logged_in() ) : ?>
-<div class="csv-columns"><div class="csv-card"><h2>J’ai déjà un compte</h2><?php wp_login_form( array( 'redirect' => CSWA_Vendors::portal_url(), 'label_username' => 'Adresse e-mail (ou ancien identifiant)', 'label_password' => 'Mot de passe', 'label_log_in' => 'Se connecter' ) ); ?><a href="<?php echo esc_url( wp_lostpassword_url( CSWA_Vendors::portal_url() ) ); ?>">Mot de passe oublié ?</a></div>
+<div class="csv-columns csv-auth-columns"><div class="csv-card"><h2>J’ai déjà un compte</h2><?php wp_login_form( array( 'redirect' => CSWA_Vendors::portal_url(), 'label_username' => 'Adresse e-mail (ou ancien identifiant)', 'label_password' => 'Mot de passe', 'label_log_in' => 'Se connecter' ) ); ?><a href="<?php echo esc_url( wp_lostpassword_url( CSWA_Vendors::portal_url() ) ); ?>">Mot de passe oublié ?</a></div>
 <div class="csv-card"><h2>Devenir marchand</h2><p>Inscris ta boutique. Tu pourras publier tes produits dès l’approbation de ton compte.</p>
-<form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+<form class="csv-register-form" method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 <input type="hidden" name="action" value="cswa_vendor_register"><?php wp_nonce_field( 'cswa_vendor_register' ); ?>
-<label>Nom de la boutique<input name="shop" required maxlength="100" autocomplete="organization"></label>
-<label>Adresse e-mail (identifiant de connexion)<input type="email" name="email" required maxlength="100" autocomplete="username"></label>
-<label>Nom du propriétaire de la boutique<input name="owner_name" required minlength="2" maxlength="120" autocomplete="name"></label>
+<label class="csv-field-half">Nom de la boutique<input name="shop" required maxlength="100" autocomplete="organization"></label>
+<label class="csv-field-half">Nom du propriétaire de la boutique<input name="owner_name" required minlength="2" maxlength="120" autocomplete="name"></label>
+<label class="csv-field-half">Adresse e-mail (identifiant de connexion)<input type="email" name="email" required maxlength="100" autocomplete="username"></label>
+<label class="csv-field-half">Numéro WhatsApp international<input type="tel" name="phone" placeholder="243…" required autocomplete="tel"></label>
 <label>Activité ou produits vendus<textarea name="activity" required minlength="2" maxlength="1000" rows="3" placeholder="Décris ton activité ou les produits que tu vends"></textarea></label>
 <?php CSWA_Vendors::shop_detail_fields(); ?>
-<label>Numéro WhatsApp international<input type="tel" name="phone" placeholder="243…" required autocomplete="tel"></label>
 <label>Mot de passe (12 caractères minimum)<input type="password" name="password" required minlength="12" maxlength="200" autocomplete="new-password"></label>
 <div hidden aria-hidden="true"><label>Site web<input name="website" tabindex="-1" autocomplete="off"></label></div>
 <button class="csv-button">Demander un compte marchand</button></form></div></div>

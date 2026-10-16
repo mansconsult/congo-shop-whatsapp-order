@@ -1,3 +1,11 @@
+# Congo-Shop — Commande WhatsApp 3.0.9
+
+## Mise à jour 3.0.9 — inscription marchand plus compacte
+
+Sur grand écran, boutique/propriétaire, e-mail/WhatsApp et Facebook/Instagram sont présentés par paires. Les champs activité, présentation, photos et mot de passe restent sur toute la largeur. Une seule colonne sur mobile et tablette. Le formulaire dispose de davantage de place à côté de la connexion. Aucun champ ajouté ou supprimé, aucune modification de validation, de traitement ou de schéma de données.
+
+Publication manuelle via GitHub Releases : voir PUBLICATION.md. Le test réel de mise à jour 3.0.8 → 3.0.9 et la vérification visuelle sur le site restent à effectuer.
+
 # Congo-Shop — Commande WhatsApp 3.0.8
 
 ## Mise à jour 3.0.8 — GitHub public

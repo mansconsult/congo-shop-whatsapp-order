@@ -1,3 +1,11 @@
+# Congo-Shop — Commande WhatsApp 3.0.8
+
+## Mise à jour 3.0.8 — GitHub public
+
+Ajout isolé du mécanisme natif WordPress de mises à jour depuis les Releases GitHub. Publication manuelle du ZIP et du manifeste : voir [PUBLICATION.md](PUBLICATION.md). Aucun jeton requis. Aucun changement du schéma de données ou des fonctions métier. Recette WordPress de bout en bout encore à réaliser.
+
+## Historique conservé
+
 # Congo-Shop — Commande WhatsApp 3.0.7
 
 ## Modification 3.0.7 — photos dans l’e-mail de nouvelle inscription

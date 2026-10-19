@@ -1,6 +1,6 @@
 <?php
 // Runs only in the disposable CI WordPress installation through wp eval-file.
-if ( ! defined( 'WP_CLI' ) || ! WP_CLI || 'http://cswa.test' !== get_option( 'home' ) ) { throw new RuntimeException( 'Disposable CI site required.' ); }
+if ( ! defined( 'WP_CLI' ) || ! WP_CLI || 'cswa.test' !== wp_parse_url( get_option( 'home' ), PHP_URL_HOST ) || '/tmp/cswa-wp/' !== ABSPATH ) { throw new RuntimeException( 'Disposable CI site required.' ); }
 function cswa_assert( $condition, $label ) { if ( ! $condition ) { throw new RuntimeException( $label ); } WP_CLI::log( 'PASS ' . $label ); }
 add_filter( 'pre_wp_mail', '__return_true' );
 $admin = get_user_by( 'login', 'ci-admin' ); wp_set_current_user( $admin->ID );

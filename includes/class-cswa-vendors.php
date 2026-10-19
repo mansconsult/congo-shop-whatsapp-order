@@ -2,7 +2,10 @@
 /** Minimal vendor portal. All authorization is checked again on the server. */
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/trait-cswa-vendor-accounts.php';
+
 class CSWA_Vendors {
+	use CSWA_Vendor_Accounts;
 	public static function enabled() {
 		return CSWA_Number::is_marketplace() && (bool) CSWA_Plugin::get_setting( 'vendor_dashboard', 0 );
 	}
@@ -15,6 +18,10 @@ class CSWA_Vendors {
 
 	public static function init() {
 		self::install_roles();
+		add_filter( 'authenticate', array( __CLASS__, 'authenticate_phone' ), 19, 3 );
+		add_filter( 'authenticate', array( __CLASS__, 'guard_phone_login' ), 100, 1 );
+		add_action( 'admin_post_cswa_account_admin', array( __CLASS__, 'handle_account_admin' ) );
+		add_action( 'admin_post_cswa_account_edit', array( __CLASS__, 'handle_account_edit' ) );
 		add_action( 'set_user_role', array( __CLASS__, 'notify_approval' ), 10, 3 );
 		add_shortcode( 'cswa_vendor_dashboard', array( __CLASS__, 'render' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'no_cache' ) );
@@ -95,6 +102,7 @@ class CSWA_Vendors {
 		if ( ! is_email( $email ) || strlen( $email ) > 100 || mb_strlen( $shop ) < 2 || mb_strlen( $shop ) > 100 || mb_strlen( $owner ) < 2 || mb_strlen( $owner ) > 120 || mb_strlen( $activity ) < 2 || mb_strlen( $activity ) > 1000 || ! $phone || strlen( $password ) < 12 || strlen( $password ) > 200 ) {
 			return new WP_Error( 'fields', 'Vérifie le nom de la boutique, l’adresse e-mail (100 caractères maximum), le nom du propriétaire, l’activité ou les produits vendus, le numéro WhatsApp international et le mot de passe d’au moins 12 caractères.' );
 		}
+		if ( self::phone_accounts( $phone ) ) { return new WP_Error( 'phone', 'Ce numéro est déjà associé à un compte. Connecte-toi ou contacte l’administrateur.' ); }
 		$details = self::validate_shop_details( $data );
 		if ( is_wp_error( $details ) ) { return $details; }
 		$photos = self::prepare_shop_photos();
@@ -411,6 +419,12 @@ class CSWA_Vendors {
 		if ( ! is_user_logged_in() || ! self::enabled() || ! self::active( get_current_user_id() ) || ! check_admin_referer( 'cswa_vendor_save' ) ) { wp_die( 'Accès non autorisé.', '', array( 'response' => 403 ) ); }
 		$data = wp_unslash( $_POST ); $vendor = get_current_user_id();
 		$kind = sanitize_key( $data['kind'] ?? '' );
+		if ( 'password' === $kind ) {
+			$result = self::change_own_password( $vendor, $data );
+			if ( is_wp_error( $result ) ) { self::redirect_result( $result, '', 'profile' ); }
+			wp_logout();
+			wp_safe_redirect( add_query_arg( 'cswa_message', 'Mot de passe modifié. Reconnecte-toi.', self::portal_url() ) ); exit;
+		}
 		if ( 'product' === $kind ) {
 			$result = self::save_product( $data, $vendor );
 			if ( ! is_wp_error( $result ) ) {
@@ -423,6 +437,7 @@ class CSWA_Vendors {
 		} elseif ( 'profile' === $kind ) {
 			$name = sanitize_text_field( $data['shop'] ?? '' ); $phone = CSWA_Number::normalize( $data['phone'] ?? '' );
 			if ( mb_strlen( $name ) < 2 || mb_strlen( $name ) > 100 || ! $phone ) { self::redirect_result( new WP_Error( 'profile', 'Vérifie le nom de la boutique et le numéro WhatsApp.' ), '', 'profile' ); }
+			if ( array_diff( self::phone_accounts( $phone ), array( $vendor ) ) ) { self::redirect_result( new WP_Error( 'phone', 'Ce numéro appartient déjà à un autre compte.' ), '', 'profile' ); }
 			$owner = sanitize_text_field( $data['owner_name'] ?? get_user_meta( $vendor, '_cswa_owner_name', true ) );
 			$activity = sanitize_textarea_field( $data['activity'] ?? get_user_meta( $vendor, '_cswa_activity', true ) );
 			if ( mb_strlen( $owner ) > 120 || mb_strlen( $activity ) > 1000 ) { self::redirect_result( new WP_Error( 'profile', 'Nom du propriétaire : 120 caractères maximum. Activité : 1000 caractères maximum.' ), '', 'profile' ); }
@@ -461,9 +476,11 @@ class CSWA_Vendors {
 
 	public static function admin_page() {
 		if ( ! current_user_can( 'manage_options' ) ) { return; }
+		if ( ! empty( $_GET['edit_vendor'] ) ) { self::account_edit_page( absint( $_GET['edit_vendor'] ) ); return; }
 		$page = max( 1, absint( $_GET['paged'] ?? 1 ) );
 		$query = new WP_User_Query( array( 'role__in' => array( 'cswa_pending', 'cswa_vendor', 'cswa_suspended' ), 'number' => 30, 'paged' => $page, 'orderby' => 'registered', 'order' => 'DESC' ) );
 		echo '<div class="wrap"><h1>Marchands</h1><p>Les inscriptions restent en attente jusqu’à ton approbation. Seuls les marchands approuvés peuvent publier et consulter leurs commandes.</p>';
+		self::legacy_admin_panel();
 		if ( ! self::enabled() ) { echo '<div class="notice notice-warning inline"><p>Espace marchand désactivé. Choisis le mode multimarchand et active l’espace dans les réglages.</p></div>'; }
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="cswa_vendor_admin"><input type="hidden" name="operation" value="page">'; wp_nonce_field( 'cswa_vendor_admin' );
 		submit_button( 'Créer / retrouver la page Espace marchand', 'secondary', 'submit', false ); echo '</form>';
@@ -473,6 +490,7 @@ class CSWA_Vendors {
 			$active = self::active( $user->ID );
 			$pending = in_array( 'cswa_pending', $user->roles, true );
 			echo '<tr><td>' . esc_html( self::shop_name( $user->ID ) ) . self::shop_details_html( $user->ID ) . '</td><td>' . esc_html( get_user_meta( $user->ID, '_cswa_owner_name', true ) ) . '</td><td>' . nl2br( esc_html( get_user_meta( $user->ID, '_cswa_activity', true ) ) ) . '</td><td><a href="' . esc_url( get_edit_user_link( $user->ID ) ) . '">' . esc_html( $user->user_email ) . '</a></td><td>' . esc_html( get_user_meta( $user->ID, '_cswa_whatsapp', true ) ) . '</td><td>' . esc_html( $active ? 'Approuvé' : ( $pending ? 'À approuver' : 'Suspendu' ) ) . ( $pending && 'failed' === get_user_meta( $user->ID, '_cswa_signup_mail_status', true ) ? '<br><small>Notification e-mail non transmise. Vérifiez l’adresse d’alerte et l’envoi des e-mails du site.</small>' : '' ) . ( $active && 'failed' === get_user_meta( $user->ID, '_cswa_approval_mail_status', true ) ? '<br><small>E-mail d’approbation non transmis. Le compte reste approuvé. Vérifiez l’envoi des e-mails du site.</small>' : '' ) . '</td><td><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+			echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=cswa-vendors&edit_vendor=' . $user->ID ) ) . '">Modifier la fiche et les accès</a></p>';
 			wp_nonce_field( 'cswa_vendor_admin' );
 			echo '<input type="hidden" name="action" value="cswa_vendor_admin"><input type="hidden" name="vendor_id" value="' . (int) $user->ID . '"><input type="hidden" name="operation" value="' . ( $active ? 'suspend' : 'approve' ) . '"><button class="button">' . ( $active ? 'Suspendre' : 'Approuver' ) . '</button></form></td></tr>';
 		}
@@ -491,6 +509,8 @@ class CSWA_Vendors {
 
 	public static function save_profile( $id ) {
 		if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'edit_user', $id ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['cswa_profile_nonce'] ?? '' ) ), 'cswa_vendor_profile' ) ) { return; }
+		$phone = CSWA_Number::normalize( wp_unslash( $_POST['cswa_phone'] ?? '' ) );
+		if ( ! $phone || array_diff( self::phone_accounts( $phone ), array( (int) $id ) ) ) { wp_die( 'Numéro invalide ou déjà utilisé par un autre compte.' ); }
 		if ( isset( $_POST['cswa_owner_name'] ) ) { update_user_meta( $id, '_cswa_owner_name', mb_substr( sanitize_text_field( wp_unslash( $_POST['cswa_owner_name'] ) ), 0, 120 ) ); }
 		if ( isset( $_POST['cswa_activity'] ) ) { update_user_meta( $id, '_cswa_activity', mb_substr( sanitize_textarea_field( wp_unslash( $_POST['cswa_activity'] ) ), 0, 1000 ) ); }
 		update_user_meta( $id, '_cswa_shop_name', sanitize_text_field( wp_unslash( $_POST['cswa_shop'] ?? '' ) ) );
@@ -505,7 +525,7 @@ class CSWA_Vendors {
 		wp_nonce_field( 'cswa_assign_vendor', 'cswa_assign_nonce' );
 		echo '<select name="cswa_vendor_id"><option value="0">Gestion directe par le site</option>';
 		foreach ( get_users( array( 'role__in' => array( 'cswa_vendor', 'cswa_suspended' ), 'orderby' => 'display_name' ) ) as $user ) {
-			echo '<option value="' . (int) $user->ID . '" ' . selected( self::product_vendor( $post->ID ), $user->ID, false ) . '>' . esc_html( self::shop_name( $user->ID ) ) . '</option>';
+			echo '<option value="' . (int) $user->ID . '" ' . selected( self::product_vendor( $post->ID ), $user->ID, false ) . '>' . esc_html( self::account_label( $user ) ) . '</option>';
 		}
 		echo '</select><p>Le numéro du compte marchand devient le destinataire WhatsApp. Sans attribution, le routage historique est conservé.</p>';
 	}

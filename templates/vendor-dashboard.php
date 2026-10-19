@@ -4,7 +4,7 @@
 <?php if ( is_user_logged_in() ) : ?><a href="<?php echo esc_url( wp_logout_url( CSWA_Vendors::portal_url() ) ); ?>">Se déconnecter</a><?php endif; ?></header>
 <?php if ( ! empty( $_GET['cswa_message'] ) ) : ?><p class="csv-notice" role="status"><?php echo esc_html( mb_substr( sanitize_text_field( wp_unslash( $_GET['cswa_message'] ) ), 0, 500 ) ); ?></p><?php endif; ?>
 <?php if ( ! is_user_logged_in() ) : ?>
-<div class="csv-columns csv-auth-columns"><div class="csv-card"><h2>J’ai déjà un compte</h2><?php wp_login_form( array( 'redirect' => CSWA_Vendors::portal_url(), 'label_username' => 'Adresse e-mail (ou ancien identifiant)', 'label_password' => 'Mot de passe', 'label_log_in' => 'Se connecter' ) ); ?><a href="<?php echo esc_url( wp_lostpassword_url( CSWA_Vendors::portal_url() ) ); ?>">Mot de passe oublié ?</a></div>
+<div class="csv-columns csv-auth-columns"><div class="csv-card"><h2>J’ai déjà un compte</h2><?php wp_login_form( array( 'redirect' => CSWA_Vendors::portal_url(), 'label_username' => 'Téléphone de connexion, e-mail ou identifiant', 'label_password' => 'Mot de passe', 'label_log_in' => 'Se connecter' ) ); ?><a href="<?php echo esc_url( wp_lostpassword_url( CSWA_Vendors::portal_url() ) ); ?>">Mot de passe oublié ?</a></div>
 <div class="csv-card"><h2>Devenir marchand</h2><p>Inscris ta boutique. Tu pourras publier tes produits dès l’approbation de ton compte.</p>
 <form class="csv-register-form" method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 <input type="hidden" name="action" value="cswa_vendor_register"><?php wp_nonce_field( 'cswa_vendor_register' ); ?>
@@ -99,6 +99,7 @@ if ( ! CSWA_Vendors::owns_order( $order, $vendor ) ) : ?><p>Commande inaccessibl
 <label>Avancement<select name="status"><?php foreach ( $next as $status ) : ?><option value="<?php echo esc_attr( $status ); ?>"><?php echo esc_html( CSWA_Orders::labels()[ $status ] ); ?></option><?php endforeach; ?></select></label><button class="csv-button">Mettre à jour</button></form>
 <?php endif; ?></div><?php endif; ?>
 <?php elseif ( 'profile' === $view ) : ?>
+<?php CSWA_Vendors::password_form(); ?>
 <div class="csv-card"><h2>Ma boutique</h2><form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="cswa_vendor_save"><input type="hidden" name="kind" value="profile"><?php wp_nonce_field( 'cswa_vendor_save' ); ?>
 <label>Nom de la boutique<input name="shop" required maxlength="100" value="<?php echo esc_attr( CSWA_Vendors::shop_name( $vendor ) ); ?>"></label>
 <label>Nom du propriétaire de la boutique<input name="owner_name" maxlength="120" autocomplete="name" value="<?php echo esc_attr( get_user_meta( $vendor, '_cswa_owner_name', true ) ); ?>"></label>

@@ -1,3 +1,17 @@
+# Congo-Shop — Commande WhatsApp 3.0.10
+
+## Comptes des marchands historiques et gestion des fiches
+
+Dans Commande WhatsApp → Marchands, les lignes des réglages à intégrer sont affichées avec un choix du numéro principal et un mot de passe initial de 12 caractères minimum. La création est manuelle, approuvée et sans e-mail inventé. Le mot de passe choisi doit être transmis personnellement par l’administrateur : aucun envoi automatique, aucune conservation en clair. Un compte marchand existant correspondant au numéro doit être explicitement rattaché ; son rôle, ses produits et son mot de passe sont conservés. Les conflits entre plusieurs comptes ne sont jamais fusionnés automatiquement.
+
+Les comptes intégrés et les nouveaux inscrits apparaissent dans la même liste Marchands et dans l’attribution des produits. Le sélecteur affiche boutique, téléphone et ID pour distinguer les homonymes. Les nouveaux inscrits restent soumis à approbation et conservent leur connexion par e-mail. Les comptes historiques intégrés utilisent le numéro principal choisi comme identifiant. Celui-ci reste stable si le numéro de réception WhatsApp est modifié.
+
+Le lien personnel de l’espace marchand mène au portail de connexion ; les droits restent fondés exclusivement sur le compte connecté, jamais sur le lien. Dans Ma boutique, le marchand peut changer son mot de passe en fournissant son mot de passe actuel. Toutes ses sessions sont alors fermées.
+
+Un lien Modifier la fiche et les accès ouvre l’édition administrateur de la boutique, du propriétaire, des coordonnées, de l’activité, de la présentation, des réseaux, des photos et du mot de passe. Aucun transfert automatique des anciens produits ou commandes. Les numéros secondaires et le routage historique des produits non attribués restent dans les réglages. L’intégration des lignes est explicite : ajouter une ligne aux réglages n’accorde pas automatiquement un accès.
+
+Recette réelle WordPress encore nécessaire avant diffusion générale : importer/rattacher un marchand de test, vérifier connexion par téléphone, attribution, isolement des produits/commandes, édition, changement de mot de passe et fermeture des sessions ; vérifier WhatsApp et Google Sheets. Aucun changement de schéma des commandes.
+
 # Congo-Shop — Commande WhatsApp 3.0.9
 
 ## Mise à jour 3.0.9 — inscription marchand plus compacte

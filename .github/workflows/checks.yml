@@ -11,5 +11,7 @@ jobs:
         run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
       - name: Update contract tests
         run: php tests/updates.php
+      - name: Merchant account lifecycle tests
+        run: php tests/vendor-accounts.php
       - name: Build release assets (no publication)
         run: python3 tools/build-release.py

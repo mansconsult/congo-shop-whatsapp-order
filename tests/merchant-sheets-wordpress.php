@@ -8,6 +8,27 @@ $settings = get_option( 'cswa_settings' );
 $settings['vendor_map'] = "Alpha = 243810000001\nBeta = 243810000002\nGamma = 243810000003\nDelta = 243810000004";
 update_option( 'cswa_settings', $settings );
 update_option( 'cswa_sheet_id', 'central-untouched' );
+// Shared remote reservation state survives a switch to another site's local options.
+$routes = array(); $lost_claim = false; $race_claim = false;
+add_filter( 'pre_http_request', function( $pre, $args, $url ) use ( &$routes, &$lost_claim, &$race_claim ) {
+ if ( false !== $pre || strpos( $url, '/spreadsheets/central-untouched' ) === false ) { return $pre; }
+ $ok = static function( $body, $code = 200 ) { return array( 'response' => array( 'code' => $code ), 'body' => wp_json_encode( $body ), 'headers' => array() ); };
+ $body = isset( $args['body'] ) ? json_decode( $args['body'], true ) : array();
+ if ( preg_match( '/_CSWA_M_([a-f0-9]{64})/', rawurldecode( $url ), $m ) ) {
+  if ( $args['method'] === 'PUT' ) { $routes[$m[1]] = $body['values'][0]; return $ok( array() ); }
+  return isset( $routes[$m[1]] ) ? $ok( array( 'values' => array( $routes[$m[1]] ) ) ) : $ok( array(), 400 );
+ }
+ $title = $body['requests'][0]['addSheet']['properties']['title'] ?? '';
+ if ( strpos( $title, '_CSWA_M_' ) === 0 ) {
+  $key = substr( $title, 8 );
+  if ( $race_claim ) { $race_claim = false; $routes[$key] = array( $key, 'other-site-owner', '' ); }
+  if ( isset( $routes[$key] ) ) { return $ok( array(), 400 ); }
+  $routes[$key] = array_column( array_column( $body['requests'][1]['updateCells']['rows'][0]['values'], 'userEnteredValue' ), 'stringValue' );
+  if ( $lost_claim ) { $lost_claim = false; return new WP_Error( 'timeout', 'claim accepted but response lost' ); }
+  return $ok( array( 'replies' => array() ) );
+ }
+ return $pre;
+}, 8, 3 );
 $books = array(); $create_count = 0; $lost_write = false; $lost_create = false; $reject_create = false;
 $transport = function( $pre, $args, $url ) use ( &$books, &$create_count, &$lost_write, &$lost_create, &$reject_create ) {
  if ( false !== $pre ) { return $pre; }
@@ -44,13 +65,14 @@ $transport = function( $pre, $args, $url ) use ( &$books, &$create_count, &$lost
   return $ok( array( 'replies' => $replies ) );
  }
  if ( strpos( $url, '/values/' ) !== false ) {
-  return $ok( array( 'values' => strpos( rawurldecode( $url ), '_CSWA_SYNC' ) !== false ? $book['markers'] : ( $book['headers'] ? array( $book['headers'] ) : array() ) ) );
+  return $ok( array( 'values' => strpos( rawurldecode( $url ), '_CSWA_SYNC' ) !== false ? $book['markers'] : ( strpos( rawurldecode( $url ), '!A:Z' ) !== false ? array_merge( array( $book['headers'] ), $book['rows'] ) : ( $book['headers'] ? array( $book['headers'] ) : array() ) ) ) );
  }
  return $ok( array( 'sheets' => array_map( static function( $p ) { return array( 'properties' => $p ); }, array_values( $book['tabs'] ) ) ) );
 };
 add_filter( 'pre_http_request', $transport, 10, 3 );
 $payload = array( 'marketplace' => true, 'product' => array( 'name' => '=FORMULA()', 'vendor' => 'Alpha' ), 'destination' => array( 'number' => '243810000001' ), 'customer' => array( 'full_name' => 'Only Alpha' ) );
 $row = CSWA_Google::build_row( $payload, 'ref-a' );
+$lost_claim = true;
 ms_assert( CSWA_Merchant_Sheets::sync( $payload, 'ref-a', $row ) === true, 'first merchant file created and written' );
 ms_assert( CSWA_Merchant_Sheets::sync( $payload, 'ref-a', $row ) === true && count( $books['merchant-file-1']['rows'] ) === 1 && $create_count === 1, 'repeat creates neither duplicate file nor row' );
 foreach ( array( 'Site', 'Marchand', 'Numéro marchand', 'ID commande', 'ID produit', 'ID demande' ) as $label ) { ms_assert( ! in_array( $label, $books['merchant-file-1']['headers'], true ), 'excluded ' . $label ); }
@@ -66,12 +88,32 @@ ms_assert( CSWA_Merchant_Sheets::sync( $single, 'single', $row ) === true && $cr
 $gamma = $payload; $gamma['product']['vendor'] = 'Gamma'; $gamma['destination']['number'] = '243810000003'; $reject_create = true;
 ms_assert( is_wp_error( CSWA_Merchant_Sheets::sync( $gamma, 'ref-g', $row ) ), 'permission error retained' );
 ms_assert( CSWA_Merchant_Sheets::sync( $gamma, 'ref-g', $row ) === true && $create_count === 3, 'confirmed rejection can retry after permission restored' );
+$site_a = get_option( CSWA_Merchant_Sheets::OPTION );
+update_option( CSWA_Merchant_Sheets::OPTION, array() );
+update_option( 'cswa_merchant_sheet_namespace', 'another-site' );
+$alias = $payload; $alias['product']['vendor'] = 'Alpha renamed';
+ms_assert( CSWA_Merchant_Sheets::sync( $alias, 'site-b-ref', $row ) === true && $create_count === 3 && count( $books['merchant-file-1']['rows'] ) === 3, 'second site reuses first merchant file despite different namespace' );
+// Simulate an old 3.0.11 journal belonging to this second site.
+$identity = CSWA_Merchant_Sheets::identity( $payload );
+$old_key = hash( 'sha256', 'another-site|' . $identity['key'] );
+$books['old-site-b'] = $books['merchant-file-1'];
+$books['old-site-b']['rows'] = array( $books['merchant-file-1']['rows'][0] );
+$books['old-site-b']['markers'] = array( array( hash( 'sha256', 'historic-b' ) ) );
+$local = get_option( CSWA_Merchant_Sheets::OPTION ); $local[$old_key] = array( 'id' => 'old-site-b', 'name' => 'Alpha', 'initialized' => true );
+update_option( CSWA_Merchant_Sheets::OPTION, $local );
+ms_assert( CSWA_Merchant_Sheets::sync( $payload, 'site-b-ref2', $row ) === true && count( $books['merchant-file-1']['rows'] ) === 5, 'legacy journal merged into common file without deletion' );
+ms_assert( CSWA_Merchant_Sheets::sync( $payload, 'site-b-ref2', $row ) === true && count( $books['merchant-file-1']['rows'] ) === 5 && isset( $books['old-site-b'] ), 'migration is repeatable and old file preserved' );
+update_option( CSWA_Merchant_Sheets::OPTION, array() );
+update_option( 'cswa_merchant_sheet_namespace', 'third-site' );
+ms_assert( CSWA_Merchant_Sheets::sync( $payload, 'site-c-ref', $row ) === true && $create_count === 3, 'third site uses the same canonical file' );
+$race = $payload; $race['merchant_sheet_identity'] = array( 'key' => 'new-race', 'name' => 'Race', 'phone' => '243810000099' ); $race_claim = true;
+ms_assert( is_wp_error( CSWA_Merchant_Sheets::sync( $race, 'race-ref', $row ) ) && $create_count === 3, 'concurrent reservation loser cannot create another file' );
 unset( $books['merchant-file-1']['tabs']['_CSWA_SYNC'] );
 ms_assert( is_wp_error( CSWA_Merchant_Sheets::sync( $payload, 'ref-a3', $row ) ), 'deleted synchronization tab blocks unsafe rewrite' );
 ms_assert( get_option( 'cswa_sheet_id' ) === 'central-untouched' && get_option( 'cswa_settings' ) === $settings, 'central file and settings unchanged' );
 $central_rows = array();
 add_filter( 'pre_http_request', function( $pre, $args, $url ) use ( &$central_rows ) {
- if ( strpos( $url, '/spreadsheets/central-untouched' ) === false ) { return $pre; }
+ if ( false !== $pre || strpos( $url, '/spreadsheets/central-untouched' ) === false ) { return $pre; }
  $data = array();
  if ( strpos( $url, ':append' ) !== false ) { $body = json_decode( $args['body'], true ); $central_rows[] = $body['values'][0]; }
  elseif ( strpos( $url, ':batchUpdate' ) !== false ) { $data = array( 'replies' => array() ); }

@@ -15,7 +15,10 @@ class CSWA_Merchant_Sheets {
    $user = get_userdata( $id );
    if ( ! $user || ! array_intersect( array( 'cswa_vendor', 'cswa_pending', 'cswa_suspended' ), (array) $user->roles ) || user_can( $user, 'manage_options' ) ) { return new WP_Error( 'merchant', 'Le compte marchand de cette demande est introuvable.' ); }
    $legacy = get_user_meta( $id, '_cswa_legacy_key', true );
-   return array( 'key' => $legacy ? 'legacy:' . $legacy : 'user:' . $id, 'name' => CSWA_Vendors::shop_name( $id ) );
+   $lines = CSWA_Vendors::legacy_merchants();
+   $phone = isset( $lines[$legacy] ) ? $lines[$legacy]['numbers'][0] : CSWA_Number::normalize( get_user_meta( $id, '_cswa_whatsapp', true ) );
+   if ( ! $phone ) { return new WP_Error( 'merchant_phone', 'Le marchand doit avoir un numéro principal commun aux sites.' ); }
+   return array( 'key' => $legacy ? 'legacy:' . $legacy : 'user:' . $id, 'name' => CSWA_Vendors::shop_name( $id ), 'phone' => $phone );
   }
   $phone = CSWA_Number::normalize( $payload['destination']['number'] ?? '' );
   $name = (string) ( $payload['product']['vendor'] ?? '' );
@@ -23,7 +26,7 @@ class CSWA_Merchant_Sheets {
   foreach ( CSWA_Vendors::legacy_merchants() as $key => $row ) {
    if ( in_array( $phone, $row['numbers'], true ) ) { $matches[$key] = $row; }
   }
-  if ( count( $matches ) === 1 ) { $key = key( $matches ); return array( 'key' => 'legacy:' . $key, 'name' => $matches[$key]['name'] ); }
+  if ( count( $matches ) === 1 ) { $key = key( $matches ); return array( 'key' => 'legacy:' . $key, 'name' => $matches[$key]['name'], 'phone' => $matches[$key]['numbers'][0] ); }
   if ( count( $matches ) > 1 ) { return new WP_Error( 'merchant', 'Plusieurs marchands utilisent ce numéro : vérifie les réglages Marchands.' ); }
   // Unassigned fallback traffic stays exclusively in the central file.
   if ( ! $name ) { return null; }
@@ -48,10 +51,10 @@ class CSWA_Merchant_Sheets {
   $files = $found['files'] ?? array();
   if ( count( $files ) > 1 || ! empty( $found['nextPageToken'] ) ) { return new WP_Error( 'merchant_duplicate', 'Plusieurs fichiers correspondent à ce marchand. Vérification administrateur nécessaire.' ); }
   if ( count( $files ) === 1 ) {
-   $registry[$key] = array( 'name' => $name, 'id' => $files[0]['id'] ); self::save_registry( $registry ); return $files[0]['id'];
+   $registry[$key] = array_merge( $registry[$key] ?? array(), array( 'name' => $name, 'id' => $files[0]['id'] ) ); self::save_registry( $registry ); return $files[0]['id'];
   }
   if ( ! empty( $registry[$key]['creating'] ) ) { return new WP_Error( 'merchant_uncertain', 'Création du fichier marchand non confirmée. Recherche automatique en cours ; aucune seconde création pour éviter un doublon.' ); }
-  $registry[$key] = array( 'name' => $name, 'creating' => gmdate( 'c' ) ); self::save_registry( $registry );
+  $registry[$key] = array_merge( $registry[$key] ?? array(), array( 'name' => $name, 'creating' => gmdate( 'c' ) ) ); self::save_registry( $registry );
   // Root, not the shared central folder: avoid inheriting its sharing permissions.
   $created = self::api( 'POST', CSWA_Google::DRIVE_API . '?fields=id&ignoreDefaultVisibility=true', $token, array( 'name' => 'Congo-Shop — Commandes — ' . $name, 'mimeType' => 'application/vnd.google-apps.spreadsheet', 'appProperties' => array( 'cswa_merchant' => $key ) ) );
   if ( is_wp_error( $created ) ) {
@@ -60,32 +63,112 @@ class CSWA_Merchant_Sheets {
    return $created;
   }
   if ( empty( $created['id'] ) ) { return new WP_Error( 'merchant_uncertain', 'Google n’a pas confirmé l’identifiant du fichier marchand.' ); }
-  $registry[$key] = array( 'name' => $name, 'id' => $created['id'] ); self::save_registry( $registry ); return $created['id'];
+  $registry[$key] = array_merge( $registry[$key] ?? array(), array( 'name' => $name, 'id' => $created['id'] ) ); self::save_registry( $registry ); return $created['id'];
+ }
+ /** A unique hidden tab in the shared central book reserves the creator atomically.
+  * The reservation and owner token are written in the same batch. Never steal a
+  * reservation after a timeout: the original site may already have created a file.
+  */
+ private static function shared_route( $central, $key, $name, $token, &$registry ) {
+  $base = CSWA_Google::SHEETS_API . '/' . rawurlencode( $central );
+  $title = '_CSWA_M_' . $key;
+  $url = $base . '/values/' . rawurlencode( "'" . $title . "'!A1:C1" );
+  if ( empty( $registry[$key]['owner'] ) ) {
+   $registry[$key]['owner'] = wp_generate_uuid4();
+   $registry[$key]['name'] = $name;
+   self::save_registry( $registry );
+  }
+  $record = self::api( 'GET', $url, $token );
+  if ( is_wp_error( $record ) ) {
+   $status = (int) ( $record->get_error_data()['status'] ?? 0 );
+   if ( 400 !== $status ) { return $record; }
+   // A 400 may mean a missing tab. addSheet fails safely if it already exists.
+   $sheet_id = hexdec( substr( $key, 0, 7 ) ) + 100;
+   $claim = self::api( 'POST', $base . ':batchUpdate', $token, array( 'requests' => array(
+    array( 'addSheet' => array( 'properties' => array( 'sheetId' => $sheet_id, 'title' => $title, 'hidden' => true, 'gridProperties' => array( 'rowCount' => 1, 'columnCount' => 3 ) ) ) ),
+    array( 'updateCells' => array( 'start' => array( 'sheetId' => $sheet_id, 'rowIndex' => 0, 'columnIndex' => 0 ), 'rows' => array( array( 'values' => self::cells( array( $key, $registry[$key]['owner'], '' ) ) ) ), 'fields' => 'userEnteredValue' ) ),
+   ) ) );
+   // Read even after a lost response or another site's simultaneous reservation.
+   $record = self::api( 'GET', $url, $token );
+   if ( is_wp_error( $record ) ) { return is_wp_error( $claim ) ? $claim : $record; }
+  }
+  $values = $record['values'][0] ?? array();
+  if ( ( $values[0] ?? '' ) !== $key || empty( $values[1] ) ) { return new WP_Error( 'merchant_registry', 'Registre marchand central incomplet ou modifié. Aucune création effectuée.' ); }
+  if ( ! empty( $values[2] ) ) { return array( 'id' => $values[2], 'publish' => '' ); }
+  if ( $values[1] !== $registry[$key]['owner'] ) { return new WP_Error( 'merchant_pending', 'Le premier site prépare le fichier commun de ce marchand. Reprise automatique différée sur ce site.' ); }
+  return array( 'id' => '', 'publish' => $url );
+ }
+ /** Merge an old site's journal without removing it or changing its sharing. */
+ private static function merge_legacy( $source, $target, $token ) {
+  $base = CSWA_Google::SHEETS_API . '/' . rawurlencode( $source );
+  $data = self::api( 'GET', $base . '/values/' . rawurlencode( "'Commandes'!A:Z" ), $token );
+  $markers = self::api( 'GET', $base . '/values/' . rawurlencode( "'_CSWA_SYNC'!A:A" ), $token );
+  if ( is_wp_error( $data ) ) { return $data; }
+  if ( is_wp_error( $markers ) ) { return $markers; }
+  $rows = $data['values'] ?? array(); $head = array_shift( $rows ); $ids = $markers['values'] ?? array();
+  if ( $head !== array_values( self::columns() ) || count( $rows ) !== count( $ids ) ) { return new WP_Error( 'merchant_migration', 'Ancien fichier modifié : vérification nécessaire avant de regrouper ses commandes.' ); }
+  foreach ( $rows as $i => $values ) {
+   $marker = $ids[$i][0] ?? '';
+   if ( ! preg_match( '/^[a-f0-9]{64}$/', $marker ) ) { return new WP_Error( 'merchant_migration', 'Ancien marqueur de synchronisation invalide.' ); }
+   $full = array_fill_keys( array_keys( CSWA_Google::columns() ), '' );
+   foreach ( array_keys( self::columns() ) as $n => $column ) { $full[$column] = $values[$n] ?? ''; }
+   $result = self::write( $target, $token, '', array_values( $full ), true, $marker );
+   if ( is_wp_error( $result ) ) { return $result; }
+  }
+  return true;
  }
  public static function sync( $payload, $ref, $row ) {
   $merchant = array_key_exists( 'merchant_sheet_identity', $payload ) ? $payload['merchant_sheet_identity'] : self::identity( $payload );
   if ( is_array( $merchant ) && isset( $merchant['error'] ) ) { return new WP_Error( 'merchant', $merchant['error'] ); }
   if ( null === $merchant ) { return true; }
   if ( is_wp_error( $merchant ) ) { return $merchant; }
+  // Upgrade snapshots from 3.0.11 using the recorded destination, not the live product.
+  if ( empty( $merchant['phone'] ) ) {
+   $resolved = self::identity( $payload );
+   if ( is_wp_error( $resolved ) ) { return $resolved; }
+   if ( ! $resolved || $resolved['key'] !== $merchant['key'] ) { return new WP_Error( 'merchant_identity', 'Identité historique du marchand à vérifier avant regroupement.' ); }
+   $merchant['phone'] = $resolved['phone'];
+  }
+  $central = CSWA_Google::sheet_id();
+  if ( ! $central ) { return new WP_Error( 'merchant_central', 'Un classeur central commun est nécessaire.' ); }
   if ( ! CSWA_Store::acquire_lock( self::LOCK, 900 ) ) { return new WP_Error( 'merchant_busy', 'Synchronisation marchand en cours, reprise différée.' ); }
   try {
-   $seed = get_option( 'cswa_merchant_sheet_namespace', '' );
-   if ( ! $seed ) { $seed = wp_generate_uuid4(); add_option( 'cswa_merchant_sheet_namespace', $seed, '', false ); $seed = get_option( 'cswa_merchant_sheet_namespace' ); }
-   $key = hash( 'sha256', $seed . '|' . $merchant['key'] );
+   $key = hash( 'sha256', 'shared-v1|' . $central . '|' . $merchant['phone'] );
+   $legacy_key = hash( 'sha256', get_option( 'cswa_merchant_sheet_namespace', '' ) . '|' . $merchant['key'] );
    $registry = get_option( self::OPTION, array() );
    $token = CSWA_Google::access_token(); if ( is_wp_error( $token ) ) { return $token; }
-   $id = self::ensure_file( $key, $merchant['name'], $token, $registry );
-   $result = is_wp_error( $id ) ? $id : self::write( $id, $token, $ref, $row, ! empty( $registry[$key]['initialized'] ) );
-   if ( isset( $registry[$key] ) ) { if ( true === $result ) { $registry[$key]['initialized'] = true; } $registry[$key]['error'] = is_wp_error( $result ) ? $result->get_error_message() : ''; self::save_registry( $registry ); }
+   $route = self::shared_route( $central, $key, $merchant['name'], $token, $registry );
+   if ( is_wp_error( $route ) ) { $registry[$key]['error'] = $route->get_error_message(); self::save_registry( $registry ); return $route; }
+   $legacy = $registry[$legacy_key]['id'] ?? '';
+   $id = $route['id'];
+   if ( ! $id ) {
+    $id = $legacy ?: self::ensure_file( $key, $merchant['name'], $token, $registry );
+   }
+   // ensure_file replaces its entry; preserve the reservation token across retries.
+   if ( is_wp_error( $id ) ) { $registry[$key]['error'] = $id->get_error_message(); self::save_registry( $registry ); return $id; }
+   $initialized = ! empty( $route['id'] ) || $id === $legacy || ! empty( $registry[$key]['initialized'] );
+   $result = self::write( $id, $token, $ref, $row, $initialized );
+   if ( true === $result && $route['publish'] ) {
+    $result = self::api( 'PUT', $route['publish'] . '?valueInputOption=RAW', $token, array( 'values' => array( array( $key, $registry[$key]['owner'], $id ) ) ) );
+    if ( ! is_wp_error( $result ) ) { $result = true; }
+   }
+   if ( true === $result && $legacy && $legacy !== $id ) { $result = self::merge_legacy( $legacy, $id, $token ); }
+   $registry[$key]['id'] = $id;
+   if ( true === $result ) {
+    $registry[$key]['initialized'] = true;
+    if ( $legacy ) { $registry[$legacy_key]['merged_into'] = $id; }
+   }
+   $registry[$key]['error'] = is_wp_error( $result ) ? $result->get_error_message() : '';
+   self::save_registry( $registry );
    return $result;
   } finally { CSWA_Store::release_lock( self::LOCK ); }
  }
  private static function cells( $values ) {
   return array_map( static function( $v ) { return array( 'userEnteredValue' => array( 'stringValue' => (string) $v ) ); }, array_values( $values ) );
  }
- private static function write( $id, $token, $ref, $row, $initialized ) {
+ private static function write( $id, $token, $ref, $row, $initialized, $existing_marker = '' ) {
   $base = CSWA_Google::SHEETS_API . '/' . rawurlencode( $id );
-  $marker = hash( 'sha256', $ref );
+  $marker = $existing_marker ?: hash( 'sha256', $ref );
   $book = self::api( 'GET', $base . '?fields=sheets.properties', $token );
   if ( is_wp_error( $book ) ) { return $book; }
   $tabs = array();
@@ -120,8 +203,9 @@ class CSWA_Merchant_Sheets {
  }
  public static function admin_panel() {
   if ( ! current_user_can( 'manage_options' ) ) { return; }
-  echo '<h2>Fichiers Google Sheets des marchands</h2><p>Un fichier privé par marchand est créé à sa première nouvelle commande. Le fichier central reste conservé. Aucun partage ni e-mail automatique. Les anciennes demandes déjà synchronisées ne sont pas recopiées.</p>';
+  echo '<h2>Fichiers Google Sheets des marchands</h2><p>Un fichier privé commun par numéro principal de marchand et par classeur central. Tous les sites doivent utiliser le même classeur central et avoir accès au fichier marchand. Le premier numéro configuré doit être identique sur tous les sites. Le fichier central reste conservé. Aucun partage ni e-mail automatique. Les anciennes demandes déjà synchronisées ne sont pas recopiées.</p>';
   foreach ( get_option( self::OPTION, array() ) as $entry ) {
+   if ( ! empty( $entry['merged_into'] ) ) { continue; }
    echo '<p><strong>' . esc_html( $entry['name'] ?? 'Marchand' ) . '</strong> : ';
    if ( ! empty( $entry['id'] ) ) { echo '<a target="_blank" rel="noopener" href="https://docs.google.com/spreadsheets/d/' . esc_attr( $entry['id'] ) . '/edit">Ouvrir le fichier</a>'; }
    else { echo 'Création à confirmer'; }

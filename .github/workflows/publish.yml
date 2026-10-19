@@ -1,0 +1,31 @@
+name: Publish plugin release
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: plugin-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and build
+        run: |
+          find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+          php tests/updates.php
+          php tests/vendor-accounts.php
+          python3 tools/build-release.py
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(python3 -c "import pathlib,re; print(re.search(r'Version: ([0-9.]+)', pathlib.Path('congo-shop-whatsapp-order.php').read_text())[1])")
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to overwrite."
+            exit 1
+          fi
+          gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Congo-Shop – Commande WhatsApp $VERSION" --notes-file RELEASE-NOTES.md "dist/$VERSION/congo-shop-whatsapp-order-$VERSION.zip" "dist/$VERSION/update.json" "dist/$VERSION/SHA256SUMS.txt"
+          gh release edit "$TAG" --draft=false --latest

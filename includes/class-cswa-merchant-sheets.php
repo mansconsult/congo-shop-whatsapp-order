@@ -107,9 +107,17 @@ class CSWA_Merchant_Sheets {
   if ( is_wp_error( $markers ) ) { return $markers; }
   $rows = $data['values'] ?? array(); $head = array_shift( $rows ); $ids = $markers['values'] ?? array();
   if ( $head !== array_values( self::columns() ) || count( $rows ) !== count( $ids ) ) { return new WP_Error( 'merchant_migration', 'Ancien fichier modifié : vérification nécessaire avant de regrouper ses commandes.' ); }
+  $prior = self::api( 'GET', CSWA_Google::SHEETS_API . '/' . rawurlencode( $target ) . '/values/' . rawurlencode( "'_CSWA_SYNC'!A:A" ), $token );
+  if ( is_wp_error( $prior ) ) { return $prior; }
+  $known = array_fill_keys( array_column( $prior['values'] ?? array(), 0 ), true );
+  $copied = 0;
   foreach ( $rows as $i => $values ) {
    $marker = $ids[$i][0] ?? '';
    if ( ! preg_match( '/^[a-f0-9]{64}$/', $marker ) ) { return new WP_Error( 'merchant_migration', 'Ancien marqueur de synchronisation invalide.' ); }
+   if ( isset( $known[$marker] ) ) { continue; }
+   if ( $copied >= 10 ) { return new WP_Error( 'merchant_migration_pending', 'Regroupement des anciennes commandes en cours, reprise automatique par lots.' ); }
+   $copied++;
+   $known[$marker] = true;
    $full = array_fill_keys( array_keys( CSWA_Google::columns() ), '' );
    foreach ( array_keys( self::columns() ) as $n => $column ) { $full[$column] = $values[$n] ?? ''; }
    $result = self::write( $target, $token, '', array_values( $full ), true, $marker );
@@ -144,7 +152,7 @@ class CSWA_Merchant_Sheets {
    if ( ! $id ) {
     $id = $legacy ?: self::ensure_file( $key, $merchant['name'], $token, $registry );
    }
-   // ensure_file replaces its entry; preserve the reservation token across retries.
+   // Only the reservation owner may create a file; all other sites reuse its published ID.
    if ( is_wp_error( $id ) ) { $registry[$key]['error'] = $id->get_error_message(); self::save_registry( $registry ); return $id; }
    $initialized = ! empty( $route['id'] ) || $id === $legacy || ! empty( $registry[$key]['initialized'] );
    $result = self::write( $id, $token, $ref, $row, $initialized );
@@ -152,7 +160,7 @@ class CSWA_Merchant_Sheets {
     $result = self::api( 'PUT', $route['publish'] . '?valueInputOption=RAW', $token, array( 'values' => array( array( $key, $registry[$key]['owner'], $id ) ) ) );
     if ( ! is_wp_error( $result ) ) { $result = true; }
    }
-   if ( true === $result && $legacy && $legacy !== $id ) { $result = self::merge_legacy( $legacy, $id, $token ); }
+   if ( true === $result && $legacy && $legacy !== $id && ( $registry[$legacy_key]['merged_into'] ?? '' ) !== $id ) { $result = self::merge_legacy( $legacy, $id, $token ); }
    $registry[$key]['id'] = $id;
    if ( true === $result ) {
     $registry[$key]['initialized'] = true;
@@ -203,7 +211,7 @@ class CSWA_Merchant_Sheets {
  }
  public static function admin_panel() {
   if ( ! current_user_can( 'manage_options' ) ) { return; }
-  echo '<h2>Fichiers Google Sheets des marchands</h2><p>Un fichier privé commun par numéro principal de marchand et par classeur central. Tous les sites doivent utiliser le même classeur central et avoir accès au fichier marchand. Le premier numéro configuré doit être identique sur tous les sites. Le fichier central reste conservé. Aucun partage ni e-mail automatique. Les anciennes demandes déjà synchronisées ne sont pas recopiées.</p>';
+  echo '<h2>Fichiers Google Sheets des marchands</h2><p>Un fichier privé commun par numéro principal de marchand et par classeur central. Tous les sites doivent utiliser le même classeur central et avoir accès au fichier marchand. Le premier numéro configuré doit être identique sur tous les sites. Le fichier central reste conservé. Aucun partage ni e-mail automatique. Les anciens fichiers 3.0.11 de ce marchand sont regroupés à sa prochaine commande sur chaque site, sans suppression des fichiers sources. Mettre à jour tous les sites avant les essais.</p>';
   foreach ( get_option( self::OPTION, array() ) as $entry ) {
    if ( ! empty( $entry['merged_into'] ) ) { continue; }
    echo '<p><strong>' . esc_html( $entry['name'] ?? 'Marchand' ) . '</strong> : ';

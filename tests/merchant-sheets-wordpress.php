@@ -10,6 +10,7 @@ update_option( 'cswa_settings', $settings );
 update_option( 'cswa_sheet_id', 'central-untouched' );
 $books = array(); $create_count = 0; $lost_write = false; $lost_create = false; $reject_create = false;
 $transport = function( $pre, $args, $url ) use ( &$books, &$create_count, &$lost_write, &$lost_create, &$reject_create ) {
+ if ( false !== $pre ) { return $pre; }
  $ok = static function( $body, $code = 200 ) { return array( 'response' => array( 'code' => $code ), 'body' => wp_json_encode( $body ), 'headers' => array() ); };
  $body = isset( $args['body'] ) ? json_decode( $args['body'], true ) : array();
  if ( strpos( $url, CSWA_Google::DRIVE_API ) === 0 ) {
@@ -68,4 +69,23 @@ ms_assert( CSWA_Merchant_Sheets::sync( $gamma, 'ref-g', $row ) === true && $crea
 unset( $books['merchant-file-1']['tabs']['_CSWA_SYNC'] );
 ms_assert( is_wp_error( CSWA_Merchant_Sheets::sync( $payload, 'ref-a3', $row ) ), 'deleted synchronization tab blocks unsafe rewrite' );
 ms_assert( get_option( 'cswa_sheet_id' ) === 'central-untouched' && get_option( 'cswa_settings' ) === $settings, 'central file and settings unchanged' );
+$central_rows = array();
+add_filter( 'pre_http_request', function( $pre, $args, $url ) use ( &$central_rows ) {
+ if ( strpos( $url, '/spreadsheets/central-untouched' ) === false ) { return $pre; }
+ $data = array();
+ if ( strpos( $url, ':append' ) !== false ) { $body = json_decode( $args['body'], true ); $central_rows[] = $body['values'][0]; }
+ elseif ( strpos( $url, ':batchUpdate' ) !== false ) { $data = array( 'replies' => array() ); }
+ elseif ( strpos( $url, '/values/' ) !== false ) {
+  $data = array( 'values' => strpos( rawurldecode( $url ), '!1:1' ) !== false ? array( CSWA_Google::headers() ) : array_map( static function( $r ) { return array( $r[ CSWA_Google::column_index( 'ref' ) ] ); }, $central_rows ) );
+ } else { $data = array( 'sheets' => array( array( 'properties' => array( 'sheetId' => 0, 'title' => CSWA_Google::tab_name() ) ) ) ); }
+ return array( 'response' => array( 'code' => 200 ), 'headers' => array(), 'body' => wp_json_encode( $data ) );
+}, 9, 3 );
+$delta = $payload; $delta['product']['vendor'] = 'Delta'; $delta['destination']['number'] = '243810000004';
+$delta['merchant_sheet_identity'] = CSWA_Merchant_Sheets::identity( $delta );
+$saved = CSWA_Store::insert_request( wp_generate_uuid4(), $delta, '127.0.0.1' );
+ms_assert( ! is_wp_error( $saved ), 'request persisted in real WordPress database' );
+$reject_create = true;
+ms_assert( CSWA_Google::sync_request( $saved['row'] ) === false && count( $central_rows ) === 1, 'central success survives merchant error' );
+ms_assert( CSWA_Google::sync_request( $saved['row'] ) === true && count( $central_rows ) === 1, 'retry completes merchant without duplicating central row' );
+ms_assert( CSWA_Store::get_by_id( $saved['row']['id'] )['sheet_status'] === 'ok', 'both destinations confirmed before marking synchronized' );
 WP_CLI::success( 'Merchant Sheets transport scenarios passed; real Google test still required.' );

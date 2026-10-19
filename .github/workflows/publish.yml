@@ -21,7 +21,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION=$(python3 -c "import pathlib,re; print(re.search(r'Version: ([0-9.]+)', pathlib.Path('congo-shop-whatsapp-order.php').read_text())[1])")
+          VERSION=$(python3 -c "import pathlib,re; print(re.search(r'Version:\s*([0-9.]+)', pathlib.Path('congo-shop-whatsapp-order.php').read_text())[1])")
           TAG="v$VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release already exists; refusing to overwrite."

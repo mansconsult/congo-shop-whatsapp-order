@@ -846,65 +846,8 @@ class CSWA_Settings {
 				<?php endif; ?>
 			<?php endif; ?>
 
-			<hr>
+			<?php CSWA_Merchant_Sheets::admin_panel(); ?>
 
-			<h2 class="title">20 dernieres demandes</h2>
-			<table class="widefat striped">
-				<thead>
-					<tr>
-						<th>Reference</th>
-						<th>Date (UTC)</th>
-						<th>Client</th>
-						<th>Produit</th>
-						<th>Journal</th>
-					</tr>
-				</thead>
-				<tbody>
-				<?php
-				$rows = CSWA_Store::latest( 20 );
-				if ( ! $rows ) :
-					?>
-					<tr><td colspan="5">Aucune demande pour le moment.</td></tr>
-					<?php
-				else :
-					foreach ( $rows as $row ) :
-						$payload = json_decode( $row['payload'], true );
-						$status  = $row['sheet_status'];
-						$label   = array(
-							'ok'      => 'Enregistree',
-							'pending' => 'En attente',
-							'failed'  => 'Echec',
-						);
-						?>
-						<tr>
-							<td><code><?php echo esc_html( $row['ref'] ); ?></code><?php
-							$order = ! empty( $row['order_id'] ) ? wc_get_order( (int) $row['order_id'] ) : false;
-							if ( $order ) { echo '<br><a href="' . esc_url( $order->get_edit_order_url() ) . '">Commande #' . esc_html( $order->get_order_number() ) . '</a>'; }
-							?></td>
-							<td><?php echo esc_html( $row['created_at'] ); ?></td>
-							<td>
-								<?php echo esc_html( $payload['customer']['full_name'] ?? '' ); ?><br>
-								<small><?php echo esc_html( $payload['customer']['phone'] ?? '' ); ?></small>
-							</td>
-							<td>
-								<?php echo esc_html( $payload['product']['name'] ?? '' ); ?>
-								<?php if ( ! empty( $payload['product']['variant_label'] ) ) : ?>
-									<br><small><?php echo esc_html( $payload['product']['variant_label'] ); ?></small>
-								<?php endif; ?>
-							</td>
-							<td>
-								<?php echo esc_html( $label[ $status ] ?? $status ); ?>
-								<?php if ( ! empty( $row['last_error'] ) ) : ?>
-									<br><small style="color:#b32d2e"><?php echo esc_html( $row['last_error'] ); ?></small>
-								<?php endif; ?>
-							</td>
-						</tr>
-						<?php
-					endforeach;
-				endif;
-				?>
-				</tbody>
-			</table>
 		</div>
 		<?php
 	}

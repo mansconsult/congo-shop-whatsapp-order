@@ -252,6 +252,9 @@ class CSWA_Rest {
 			'test_mode'       => (bool) CSWA_Plugin::get_setting( 'test_mode', 0 ),
 		);
 
+		$merchant_sheet = CSWA_Merchant_Sheets::identity( $payload );
+		$payload['merchant_sheet_identity'] = is_wp_error( $merchant_sheet ) ? array( 'error' => $merchant_sheet->get_error_message() ) : $merchant_sheet;
+
 		$saved = CSWA_Store::insert_request(
 			$idem_key,
 			$payload,

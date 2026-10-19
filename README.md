@@ -1,3 +1,17 @@
+# Congo-Shop — Commande WhatsApp 3.0.11
+
+Le tableau « 20 dernières demandes » est retiré des réglages, sans supprimer les demandes ni produits.
+
+Chaque marchand identifié d’une marketplace reçoit un fichier Google Sheets distinct lors de sa première nouvelle demande synchronisée. Le fichier central et sa structure sont conservés. Les fichiers individuels ont un onglet Commandes avec le statut en liste déroulante ; les colonnes Site, Marchand, Numéro marchand, ID produit et les identifiants de commande/demande sont exclus. Un onglet technique masqué _CSWA_SYNC contient des empreintes de synchronisation, jamais les identifiants bruts : ne pas le supprimer ou le modifier. Les anciennes demandes déjà synchronisées ne sont pas recopiées.
+
+Les liens et erreurs des fichiers individuels sont visibles dans Commande WhatsApp, en bas des réglages. Les fichiers sont créés dans Mon Drive du compte Google connecté, sans reprendre le dossier partagé du fichier central et sans partage automatique. Un même marchand présent sur plusieurs sites reçoit un fichier par site ; la consolidation entre sites n’est pas incluse. Les boutiques uniques et prestations ne créent pas de journal marchand supplémentaire.
+
+Le scope OAuth drive.file existant suffit. Les API Google Drive et Sheets doivent être activées pour le projet Google. Un accès perdu ou fichier supprimé ne provoque pas sa recréation. Une création dont la réponse est perdue est recherchée grâce à une propriété privée Drive ; si elle reste introuvable, la synchronisation reste bloquée plutôt que de multiplier les fichiers. Après un refus explicite de permissions, une reprise est possible une fois la connexion corrigée.
+
+Les écritures centrales déjà réussies ne sont pas répétées lors d’un échec marchand. Ligne individuelle et empreinte sont écrites dans la même opération atomique Sheets. Les demandes en échec restent dans la file de reprise existante. Aucune modification de schéma de base de données, aucun partage ni e-mail supplémentaire.
+
+Validation Google réelle et recette sur le site de test encore nécessaires avant publication générale.
+
 # Congo-Shop — Commande WhatsApp 3.0.10
 
 ## Comptes des marchands historiques et gestion des fiches

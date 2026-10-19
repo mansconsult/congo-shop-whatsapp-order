@@ -1384,12 +1384,9 @@ class CSWA_Google {
 				CSWA_Store::set_sheet_status( (int) $request['id'], 'failed', $previous->get_error_message(), 300 );
 				return false;
 			}
-			if ( $previous ) {
-				CSWA_Store::set_sheet_status( (int) $request['id'], 'ok' );
-				return true;
-			}
 		}
-		$result = self::append_row( $row, $when );
+		$result = $previous ? true : self::append_row( $row, $when );
+		if ( true === $result ) { $result = CSWA_Merchant_Sheets::sync( $payload, $request['ref'], $row ); }
 
 		if ( true === $result ) {
 			CSWA_Store::set_sheet_status( (int) $request['id'], 'ok' );

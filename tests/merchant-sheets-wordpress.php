@@ -65,7 +65,7 @@ $transport = function( $pre, $args, $url ) use ( &$books, &$create_count, &$lost
   return $ok( array( 'replies' => $replies ) );
  }
  if ( strpos( $url, '/values/' ) !== false ) {
-  return $ok( array( 'values' => strpos( rawurldecode( $url ), '_CSWA_SYNC' ) !== false ? $book['markers'] : ( strpos( rawurldecode( $url ), '!A:Z' ) !== false ? array_merge( array( $book['headers'] ), $book['rows'] ) : ( $book['headers'] ? array( $book['headers'] ) : array() ) ) ) );
+  return $ok( array( 'values' => strpos( rawurldecode( $url ), '_CSWA_SYNC' ) !== false ? $book['markers'] : ( substr( rawurldecode( $url ), -10 ) === "'Commandes'" ? array_merge( array( $book['headers'] ), $book['rows'] ) : ( $book['headers'] ? array( $book['headers'] ) : array() ) ) ) );
  }
  return $ok( array( 'sheets' => array_map( static function( $p ) { return array( 'properties' => $p ); }, array_values( $book['tabs'] ) ) ) );
 };

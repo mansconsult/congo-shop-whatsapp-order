@@ -101,7 +101,7 @@ class CSWA_Merchant_Sheets {
  /** Merge an old site's journal without removing it or changing its sharing. */
  private static function merge_legacy( $source, $target, $token ) {
   $base = CSWA_Google::SHEETS_API . '/' . rawurlencode( $source );
-  $data = self::api( 'GET', $base . '/values/' . rawurlencode( "'Commandes'!A:Z" ), $token );
+  $data = self::api( 'GET', $base . '/values/' . rawurlencode( "'Commandes'" ), $token );
   $markers = self::api( 'GET', $base . '/values/' . rawurlencode( "'_CSWA_SYNC'!A:A" ), $token );
   if ( is_wp_error( $data ) ) { return $data; }
   if ( is_wp_error( $markers ) ) { return $markers; }

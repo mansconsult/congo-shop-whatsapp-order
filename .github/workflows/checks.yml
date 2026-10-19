@@ -15,3 +15,29 @@ jobs:
         run: php tests/vendor-accounts.php
       - name: Build release assets (no publication)
         run: python3 tools/build-release.py
+  wordpress:
+    runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-password
+          MYSQL_DATABASE: wordpress
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -pci-only-password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare disposable WordPress and WooCommerce
+        run: |
+          curl --fail --location https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          php /tmp/wp core download --path=/tmp/cswa-wp
+          php /tmp/wp config create --path=/tmp/cswa-wp --dbname=wordpress --dbuser=root --dbpass=ci-only-password --dbhost=127.0.0.1:3306
+          php /tmp/wp core install --path=/tmp/cswa-wp --url=http://cswa.test --title=CI --admin_user=ci-admin --admin_password=ci-only-admin-password --admin_email=ci@example.test --skip-email
+          php /tmp/wp plugin install woocommerce --activate --path=/tmp/cswa-wp
+          mkdir /tmp/cswa-wp/wp-content/plugins/congo-shop-whatsapp-order
+          cp -r includes assets templates congo-shop-whatsapp-order.php /tmp/cswa-wp/wp-content/plugins/congo-shop-whatsapp-order/
+          php /tmp/wp plugin activate congo-shop-whatsapp-order --path=/tmp/cswa-wp
+      - name: Real WordPress authentication, permissions and product assignment
+        run: php /tmp/wp eval-file "$GITHUB_WORKSPACE/tests/vendor-accounts-wordpress.php" --path=/tmp/cswa-wp

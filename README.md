@@ -10,7 +10,7 @@ Le lien personnel de l’espace marchand mène au portail de connexion ; les dro
 
 Un lien Modifier la fiche et les accès ouvre l’édition administrateur de la boutique, du propriétaire, des coordonnées, de l’activité, de la présentation, des réseaux, des photos et du mot de passe. Aucun transfert automatique des anciens produits ou commandes. Les numéros secondaires et le routage historique des produits non attribués restent dans les réglages. L’intégration des lignes est explicite : ajouter une ligne aux réglages n’accorde pas automatiquement un accès.
 
-Recette réelle WordPress encore nécessaire avant diffusion générale : importer/rattacher un marchand de test, vérifier connexion par téléphone, attribution, isolement des produits/commandes, édition, changement de mot de passe et fermeture des sessions ; vérifier WhatsApp et Google Sheets. Aucun changement de schéma des commandes.
+Tests automatisés réussis sur WordPress 7.1.3 et WooCommerce 11.2.1 : création des comptes, authentification native par téléphone, filtres de sécurité, refus des doublons, changement de mot de passe avec révocation des sessions, attribution de produits et conservation des réglages. Recette sur le site de test encore nécessaire avant diffusion générale : importer/rattacher un marchand de test, vérifier connexion par téléphone, attribution, isolement des produits/commandes, édition, changement de mot de passe et fermeture des sessions ; vérifier WhatsApp et Google Sheets. Aucun changement de schéma des commandes.
 
 # Congo-Shop — Commande WhatsApp 3.0.9
 

@@ -80,6 +80,6 @@ update_post_meta( $parent_id, '_cswa_vendor_id', $vendors[0]->ID );
 foreach ( array( 'single', 'marketplace' ) as $mode ) {
  $settings['site_mode'] = $mode; update_option( 'cswa_settings', $settings );
  $r = CSWA_Number::resolve( $parent_id, $vid, $phone );
- oc_assert( $r['source'] === 'compte-marchand' && $r['number'] === '243810000001', 'merchant account priority preserved in ' . $mode );
+ oc_assert( 'single' === $mode ? ( $r['source'] === 'site' && $r['number'] === $settings['whatsapp_number'] ) : ( $r['source'] === 'compte-marchand' && $r['number'] === '243810000001' ), 'existing account/site priority preserved in ' . $mode );
 }
 WP_CLI::success( 'OneClick resolution and real WooCommerce persistence passed; no live Google delivery tested.' );

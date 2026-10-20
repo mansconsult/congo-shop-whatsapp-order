@@ -27,6 +27,7 @@ class CSWA_Settings {
 		add_action( 'admin_post_cswa_oauth_callback', array( __CLASS__, 'handle_oauth_callback' ) );
 		add_action( 'admin_post_cswa_disconnect', array( __CLASS__, 'handle_disconnect' ) );
 		add_action( 'admin_post_cswa_retry', array( __CLASS__, 'handle_retry' ) );
+		add_action( 'admin_post_cswa_merchant_reconcile', array( __CLASS__, 'handle_merchant_reconcile' ) );
 		add_action( 'admin_post_cswa_scan', array( __CLASS__, 'handle_scan' ) );
 		add_action( 'admin_post_cswa_repair', array( __CLASS__, 'handle_repair' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'sheet_error_notice' ) );
@@ -246,6 +247,14 @@ class CSWA_Settings {
 	 *
 	 * @return void
 	 */
+	public static function handle_merchant_reconcile() {
+		if ( ! current_user_can( self::CAP ) || ! check_admin_referer( 'cswa_merchant_reconcile' ) ) { wp_die( 'Action non autorisee.' ); }
+		CSWA_Merchant_Sheets::start_reconcile();
+		CSWA_Merchant_Sheets::reconcile_batch();
+		wp_safe_redirect( self::back_url( 'retried' ) );
+		exit;
+	}
+
 	public static function handle_retry() {
 		if ( ! current_user_can( self::CAP ) || ! check_admin_referer( 'cswa_retry' ) ) {
 			wp_die( 'Action non autorisee.' );

@@ -1448,6 +1448,7 @@ class CSWA_Google {
 			return;
 		}
 
+		CSWA_Merchant_Sheets::reconcile_batch();
 		$rows = CSWA_Store::pending( 20 );
 
 		foreach ( $rows as $row ) {

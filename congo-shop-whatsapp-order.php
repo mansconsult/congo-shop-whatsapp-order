@@ -3,7 +3,7 @@
  * Plugin Name: Congo-Shop - Commande WhatsApp
  * Plugin URI:  https://mans-consulting.com/
  * Description: Commandes WooCommerce enregistrées avant ouverture de WhatsApp, synchronisation Google Sheets et espace marchand facultatif avec approbation des vendeurs.
- * Version:     3.0.12
+ * Version:     3.0.13
  * Author:      Mans Consulting
  * Text Domain: cswa
  * Requires at least: 5.8
@@ -16,7 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CSWA_VERSION', '3.0.12' );
+define( 'CSWA_VERSION', '3.0.13' );
 define( 'CSWA_FILE', __FILE__ );
 define( 'CSWA_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CSWA_URL', plugin_dir_url( __FILE__ ) );

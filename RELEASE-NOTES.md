@@ -1,12 +1,11 @@
-Version 3.0.12 — Un seul fichier marchand pour plusieurs sites
+Version 3.0.13 — Boutiques uniques et reprise des fichiers marchands
 
-- Identité commune basée sur le numéro principal du marchand et le classeur central partagé.
-- Registre technique masqué dans le classeur central pour choisir un seul fichier, même en cas de créations simultanées.
-- Réutilisation du fichier 3.0.11 du premier site à synchroniser. Les autres sites regroupent leurs anciens fichiers à la prochaine commande du marchand, par lots, sans supprimer les sources.
-- Conservation du fichier central, de ses feuilles mensuelles, des réglages et des colonnes marchands simplifiées.
+- Les commandes des boutiques uniques rejoignent le fichier du même numéro marchand sur les marketplaces, avec le même classeur central.
+- Les anciennes identités vides et erreurs de configuration peuvent être résolues à nouveau à partir de la destination enregistrée, sans relire l’attribution actuelle du produit.
+- Un numéro de marketplace non identifié produit une erreur explicite ; la demande reste dans le classeur central et dans la file de reprise.
+- Bouton administrateur « Compléter les fichiers marchands avec les commandes enregistrées » : reprise par lots des demandes locales, déduplication conservée, aucun message WhatsApp ni nouvelle commande WooCommerce.
+- Diagnostic des numéros contradictoires entre OneClick et les réglages Marchands, sans changer automatiquement le destinataire.
 
-Conditions : mettre à jour tous les sites ; utiliser le même classeur central et le même premier numéro marchand ; les connexions Google doivent autoriser l'accès au fichier commun (même compte et même projet OAuth recommandés). Aucun partage de fichier automatique. Ne pas renommer les onglets techniques ni modifier l'ordre des lignes des anciens fichiers avant leur reprise.
+Mettre à jour les sites. Pour réutiliser un ancien fichier encore non enregistré dans le registre commun, lancer d’abord la reprise sur le site qui possède déjà ce fichier, puis sur les autres sites. Les anciens fichiers sont conservés. Un fichier est rattaché au marchand destinataire, pas au site marketplace de provenance.
 
-Une réservation interrompue attend la reprise du site qui l'a créée. Elle n'est jamais remplacée automatiquement par une seconde création. Les fichiers sources restent dans Drive après regroupement ; vérifier le contenu commun avant de les archiver.
-
-Tests automatisés sur WordPress/WooCommerce avec Google simulé. Validation réelle sur deux sites encore requise.
+Les fichiers restent privés. Aucun changement des permissions Google, des réglages ou des numéros WhatsApp. La reprise ne peut pas deviner le bon propriétaire des commandes dont le nom et le numéro sont contradictoires : corriger ces attributions après vérification administrateur.

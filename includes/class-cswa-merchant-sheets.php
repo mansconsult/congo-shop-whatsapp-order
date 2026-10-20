@@ -9,8 +9,9 @@ class CSWA_Merchant_Sheets {
  }
  /** Use the recorded vendor, never the current assignment of a product. */
  public static function identity( $payload ) {
-  if ( empty( $payload['marketplace'] ) || ! empty( $payload['product']['is_service'] ) ) { return null; }
-  $id = (int) ( $payload['product']['vendor_id'] ?? 0 );
+  if ( ! empty( $payload['product']['is_service'] ) ) { return null; }
+  $single = array_key_exists( 'marketplace', $payload ) && ! $payload['marketplace'];
+  $id = $single ? 0 : (int) ( $payload['product']['vendor_id'] ?? 0 );
   if ( $id ) {
    $user = get_userdata( $id );
    if ( ! $user || ! array_intersect( array( 'cswa_vendor', 'cswa_pending', 'cswa_suspended' ), (array) $user->roles ) || user_can( $user, 'manage_options' ) ) { return new WP_Error( 'merchant', 'Le compte marchand de cette demande est introuvable.' ); }
@@ -28,9 +29,10 @@ class CSWA_Merchant_Sheets {
   }
   if ( count( $matches ) === 1 ) { $key = key( $matches ); return array( 'key' => 'legacy:' . $key, 'name' => $matches[$key]['name'], 'phone' => $matches[$key]['numbers'][0] ); }
   if ( count( $matches ) > 1 ) { return new WP_Error( 'merchant', 'Plusieurs marchands utilisent ce numéro : vérifie les réglages Marchands.' ); }
-  // Unassigned fallback traffic stays exclusively in the central file.
-  if ( ! $name ) { return null; }
-  return new WP_Error( 'merchant', 'Marchand non identifié : attribue le produit à un compte ou renseigne sa ligne dans les réglages Marchands.' );
+  if ( $single && $phone ) {
+   return array( 'key' => 'phone:' . $phone, 'name' => (string) ( $payload['site'] ?? 'Boutique' ), 'phone' => $phone );
+  }
+  return new WP_Error( 'merchant', 'Marchand non identifié pour le numéro ' . $phone . ' : renseigne sa ligne dans les réglages Marchands. La commande reste conservée dans le classeur central.' );
  }
  private static function api( $method, $url, $token, $body = null ) {
   $args = array( 'method' => $method, 'timeout' => 25, 'redirection' => 0, 'headers' => array( 'Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json' ) );
@@ -127,7 +129,9 @@ class CSWA_Merchant_Sheets {
  }
  public static function sync( $payload, $ref, $row ) {
   $merchant = array_key_exists( 'merchant_sheet_identity', $payload ) ? $payload['merchant_sheet_identity'] : self::identity( $payload );
-  if ( is_array( $merchant ) && isset( $merchant['error'] ) ) { return new WP_Error( 'merchant', $merchant['error'] ); }
+  // Older versions stored null for single shops, or froze a configuration error.
+  // Retry using the recorded destination; never read the live product assignment.
+  if ( null === $merchant || ( is_array( $merchant ) && isset( $merchant['error'] ) ) ) { $merchant = self::identity( $payload ); }
   if ( null === $merchant ) { return true; }
   if ( is_wp_error( $merchant ) ) { return $merchant; }
   // Upgrade snapshots from 3.0.11 using the recorded destination, not the live product.
@@ -212,6 +216,13 @@ class CSWA_Merchant_Sheets {
  public static function admin_panel() {
   if ( ! current_user_can( 'manage_options' ) ) { return; }
   echo '<h2>Fichiers Google Sheets des marchands</h2><p>Un fichier privé commun par numéro principal de marchand et par classeur central. Tous les sites doivent utiliser le même classeur central et avoir accès au fichier marchand. Le premier numéro configuré doit être identique sur tous les sites. Le fichier central reste conservé. Aucun partage ni e-mail automatique. Les anciens fichiers 3.0.11 de ce marchand sont regroupés à sa prochaine commande sur chaque site, sans suppression des fichiers sources. Mettre à jour tous les sites avant les essais.</p>';
+  echo '<p>Les boutiques uniques sont incluses. Un site marketplace ne reçoit pas un fichier à son nom : chaque commande rejoint le fichier du marchand destinataire.</p>';
+  echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="cswa_merchant_reconcile">';
+  wp_nonce_field( 'cswa_merchant_reconcile' );
+  echo '<button type="submit" class="button">Compléter les fichiers marchands avec les commandes enregistrées</button><p>Reprend les demandes locales déjà synchronisées, par lots, sans renvoyer de message WhatsApp ni créer de commande WooCommerce. Les marqueurs existants évitent les doublons. Les fichiers sources sont conservés.</p></form>';
+  $recovery = get_option( 'cswa_merchant_reconcile', array() );
+  if ( $recovery ) { echo '<p>Reprise : ' . ( empty( $recovery['done'] ) ? 'analyse en cours' : 'analyse terminée' ) . ', ' . (int) $recovery['queued'] . ' demandes remises en file. Les compteurs de synchronisation ci-dessus indiquent les écritures restant à traiter.</p>'; }
+  self::assignment_warnings();
   foreach ( get_option( self::OPTION, array() ) as $entry ) {
    if ( ! empty( $entry['merged_into'] ) ) { continue; }
    echo '<p><strong>' . esc_html( $entry['name'] ?? 'Marchand' ) . '</strong> : ';
@@ -220,5 +231,47 @@ class CSWA_Merchant_Sheets {
    if ( ! empty( $entry['error'] ) ) { echo ' — ' . esc_html( $entry['error'] ); }
    echo '</p>';
   }
+ }
+ /** Surface contradictory OneClick labels without changing recipients. */
+ private static function assignment_warnings() {
+  $lines = CSWA_Vendors::legacy_merchants();
+  foreach ( get_posts( array( 'post_type' => 'wa-order-numbers', 'post_status' => 'publish', 'numberposts' => -1 ) ) as $record ) {
+   $phone = CSWA_Number::normalize( get_post_meta( $record->ID, 'wa_order_phone_number_input', true ) );
+   foreach ( $lines as $merchant ) {
+    if ( strtolower( trim( $record->post_title ) ) !== strtolower( trim( $merchant['name'] ) ) || in_array( $phone, $merchant['numbers'], true ) ) { continue; }
+    echo '<p><strong>Numéros contradictoires — ' . esc_html( $record->post_title ) . '</strong> : OneClick utilise ' . esc_html( $phone ?: '(vide)' ) . ', mais les réglages Marchands indiquent ' . esc_html( implode( ', ', $merchant['numbers'] ) ) . '. Vérifie le destinataire avant de corriger ces réglages. <a href="' . esc_url( get_edit_post_link( $record->ID ) ) . '">Vérifier OneClick</a></p>';
+   }
+  }
+ }
+ /** Explicit admin recovery, bounded to requests existing at the start. */
+ public static function start_reconcile() {
+  global $wpdb;
+  if ( ! CSWA_Store::acquire_lock( 'cswa_merchant_reconcile_lock', 60 ) ) { return; }
+  try {
+   $state = get_option( 'cswa_merchant_reconcile', array() );
+   if ( $state && empty( $state['done'] ) ) { return; }
+   update_option( 'cswa_merchant_reconcile', array( 'cursor' => 0, 'end' => (int) $wpdb->get_var( 'SELECT MAX(id) FROM ' . CSWA_Store::table() ), 'queued' => 0, 'done' => false ), false );
+  } finally { CSWA_Store::release_lock( 'cswa_merchant_reconcile_lock' ); }
+ }
+ public static function reconcile_batch() {
+  global $wpdb;
+  $state = get_option( 'cswa_merchant_reconcile', array() );
+  if ( ! $state || ! empty( $state['done'] ) || ! CSWA_Store::acquire_lock( 'cswa_merchant_reconcile_lock', 60 ) ) { return; }
+  try {
+   $state = get_option( 'cswa_merchant_reconcile' );
+   $table = CSWA_Store::table();
+   $rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,payload,sheet_status FROM {$table} WHERE id > %d AND id <= %d ORDER BY id ASC LIMIT 100", $state['cursor'], $state['end'] ), ARRAY_A );
+   foreach ( $rows as $request ) {
+    $payload = json_decode( $request['payload'], true );
+    if ( 'ok' === $request['sheet_status'] && is_array( $payload ) && empty( $payload['product']['is_service'] ) ) {
+     // Recheck central idempotence and the existing merchant marker in the usual worker.
+     $changed = $wpdb->update( $table, array( 'sheet_status' => 'pending', 'next_try' => gmdate( 'Y-m-d H:i:s' ), 'last_error' => null ), array( 'id' => (int) $request['id'], 'sheet_status' => 'ok' ) );
+     $state['queued'] += (int) $changed;
+    }
+    $state['cursor'] = (int) $request['id'];
+   }
+   $state['done'] = count( $rows ) < 100 || $state['cursor'] >= $state['end'];
+   update_option( 'cswa_merchant_reconcile', $state, false );
+  } finally { CSWA_Store::release_lock( 'cswa_merchant_reconcile_lock' ); }
  }
 }

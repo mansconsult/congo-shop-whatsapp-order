@@ -43,3 +43,5 @@ jobs:
         run: php /tmp/wp eval-file "$GITHUB_WORKSPACE/tests/vendor-accounts-wordpress.php" --path=/tmp/cswa-wp
       - name: Merchant Sheets retry and isolation scenarios
         run: php /tmp/wp eval-file "$GITHUB_WORKSPACE/tests/merchant-sheets-wordpress.php" --path=/tmp/cswa-wp
+      - name: OneClick recipient and order regression tests
+        run: php /tmp/wp eval-file "$GITHUB_WORKSPACE/tests/oneclick-wordpress.php" --path=/tmp/cswa-wp

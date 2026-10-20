@@ -1,3 +1,12 @@
+# Version 3.0.15 — Résolution des attributions OneClick
+
+- Lecture de toutes les entrées publiées correspondant au titre attribué.
+- Les doublons sont acceptés uniquement si tous leurs numéros sont valides et identiques après normalisation.
+- Une entrée vide, invalide ou contradictoire bloque la destination sans repli silencieux.
+- Le nom privilégie le titre correspondant exactement à celui du produit.
+- Priorités existantes et données conservées ; aucune modification des entrées OneClick ou des attributions.
+- Tests WordPress/MySQL et WooCommerce : doublons, formats, ambiguïtés, priorités, formulaire et commande persistée. Les tests Google existants utilisent un transport simulé ; ils ne valident pas une livraison sur Google en production.
+
 Version 3.0.14 — Boutiques uniques et reprise des fichiers marchands
 
 - Reprise limitée à trois demandes par passage, verrou entre les tâches et pause entre les lots pour respecter les quotas Google. Une réponse 429 déclenche une pause automatique ; les erreurs restantes sont affichées dans les réglages.

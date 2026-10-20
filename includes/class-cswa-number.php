@@ -317,12 +317,25 @@ class CSWA_Number {
 			$title = (string) get_post_meta( $id, '_wa_order_phone_number', true );
 			$records = '' === trim( $title ) ? array() : get_posts( array(
 				'title' => $title, 'post_type' => 'wa-order-numbers',
-				'post_status' => 'publish', 'numberposts' => 2, 'fields' => 'ids',
+				'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids',
+				'orderby' => 'ID', 'order' => 'ASC',
 			) );
-			// Duplicate titles are ambiguous: require one published recipient.
-			$record_id = 1 === count( $records ) ? (int) $records[0] : 0;
+			// A title can match several records under the database collation.
+			// Accept them only when EVERY record resolves to the same valid number.
+			$number = '';
+			$record_id = 0;
+			foreach ( $records as $candidate_id ) {
+				$candidate = self::normalize( get_post_meta( $candidate_id, 'wa_order_phone_number_input', true ) );
+				if ( '' === $candidate || ( '' !== $number && $candidate !== $number ) ) {
+					return array( 'number' => '', 'source' => 'produit:oneclick', 'vendor' => '' );
+				}
+				$number = $candidate;
+				if ( ! $record_id || ( $title !== get_post_field( 'post_title', $record_id ) && $title === get_post_field( 'post_title', $candidate_id ) ) ) {
+					$record_id = (int) $candidate_id;
+				}
+			}
 			return array(
-				'number' => $record_id ? self::normalize( get_post_meta( $record_id, 'wa_order_phone_number_input', true ) ) : '',
+				'number' => $number,
 				'source' => 'produit:oneclick',
 				'vendor' => $record_id ? sanitize_text_field( get_the_title( $record_id ) ) : '',
 			);

@@ -1,5 +1,6 @@
-Version 3.0.13 — Boutiques uniques et reprise des fichiers marchands
+Version 3.0.14 — Boutiques uniques et reprise des fichiers marchands
 
+- Reprise limitée à trois demandes par passage, verrou entre les tâches et pause entre les lots pour respecter les quotas Google. Une réponse 429 déclenche une pause automatique ; les erreurs restantes sont affichées dans les réglages.
 - Les commandes des boutiques uniques rejoignent le fichier du même numéro marchand sur les marketplaces, avec le même classeur central.
 - Les anciennes identités vides et erreurs de configuration peuvent être résolues à nouveau à partir de la destination enregistrée, sans relire l’attribution actuelle du produit.
 - Un numéro de marketplace non identifié produit une erreur explicite ; la demande reste dans le classeur central et dans la file de reprise.

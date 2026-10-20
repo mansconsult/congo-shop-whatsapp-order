@@ -35,11 +35,17 @@ class CSWA_Merchant_Sheets {
   return new WP_Error( 'merchant', 'Marchand non identifié pour le numéro ' . $phone . ' : renseigne sa ligne dans les réglages Marchands. La commande reste conservée dans le classeur central.' );
  }
  private static function api( $method, $url, $token, $body = null ) {
+  if ( get_transient( 'cswa_merchant_quota_pause' ) ) { return new WP_Error( 'merchant_quota', 'Google demande une pause (quota temporaire). Reprise automatique différée.', array( 'status' => 429 ) ); }
   $args = array( 'method' => $method, 'timeout' => 25, 'redirection' => 0, 'headers' => array( 'Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json' ) );
   if ( null !== $body ) { $args['body'] = wp_json_encode( $body ); }
   $r = wp_remote_request( $url, $args );
   if ( is_wp_error( $r ) ) { return new WP_Error( 'merchant_network', 'Google Sheets marchand : réponse réseau incertaine ; reprise différée.' ); }
   $code = wp_remote_retrieve_response_code( $r ); $data = json_decode( wp_remote_retrieve_body( $r ), true );
+  if ( 429 === $code ) {
+   $retry = (int) wp_remote_retrieve_header( $r, 'retry-after' );
+   set_transient( 'cswa_merchant_quota_pause', 1, max( 90, min( 3600, $retry ) ) );
+   return new WP_Error( 'merchant_quota', 'Google demande une pause (quota temporaire). Reprise automatique différée.', array( 'status' => 429 ) );
+  }
   if ( $code < 200 || $code >= 300 || ! is_array( $data ) ) { return new WP_Error( 'merchant_api', 'Google Sheets marchand : erreur HTTP ' . $code . '. Vérifie la connexion Google et les droits du fichier.', array( 'status' => $code ) ); }
   return $data;
  }
@@ -222,6 +228,9 @@ class CSWA_Merchant_Sheets {
   echo '<button type="submit" class="button">Compléter les fichiers marchands avec les commandes enregistrées</button><p>Reprend les demandes locales déjà synchronisées, par lots, sans renvoyer de message WhatsApp ni créer de commande WooCommerce. Les marqueurs existants évitent les doublons. Les fichiers sources sont conservés.</p></form>';
   $recovery = get_option( 'cswa_merchant_reconcile', array() );
   if ( $recovery ) { echo '<p>Reprise : ' . ( empty( $recovery['done'] ) ? 'analyse en cours' : 'analyse terminée' ) . ', ' . (int) $recovery['queued'] . ' demandes remises en file. Les compteurs de synchronisation ci-dessus indiquent les écritures restant à traiter.</p>'; }
+  global $wpdb;
+  $errors = $wpdb->get_results( "SELECT last_error,COUNT(*) AS total FROM " . CSWA_Store::table() . " WHERE sheet_status = 'failed' GROUP BY last_error ORDER BY total DESC LIMIT 5", ARRAY_A );
+  foreach ( $errors as $error ) { echo '<p>' . (int) $error['total'] . ' demande(s) à reprendre : ' . esc_html( $error['last_error'] ) . '</p>'; }
   self::assignment_warnings();
   foreach ( get_option( self::OPTION, array() ) as $entry ) {
    if ( ! empty( $entry['merged_into'] ) ) { continue; }

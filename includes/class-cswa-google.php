@@ -1444,19 +1444,21 @@ class CSWA_Google {
 	 * @return void
 	 */
 	public static function process_queue() {
-		if ( ! self::is_connected() ) {
+		if ( ! self::is_connected() || get_transient( 'cswa_merchant_quota_pause' ) || get_transient( 'cswa_queue_pause' ) ) {
 			return;
 		}
-
-		CSWA_Merchant_Sheets::reconcile_batch();
-		$rows = CSWA_Store::pending( 20 );
-
-		foreach ( $rows as $row ) {
-			$ok = self::sync_request( $row );
-			if ( ! $ok && get_option( 'cswa_sheet_error' ) ) {
-				// Probleme bloquant : inutile d'insister sur les autres lignes.
-				break;
+		if ( ! CSWA_Store::acquire_lock( 'cswa_queue_worker', 300 ) ) { return; }
+		try {
+			// Shared-account Google quotas: small batches, no overlapping workers,
+			// and a pause between manual/cron runs. Pending requests remain durable.
+			set_transient( 'cswa_queue_pause', 1, 90 );
+			CSWA_Merchant_Sheets::reconcile_batch();
+			$rows = CSWA_Store::pending( 3 );
+			$started = microtime( true );
+			foreach ( $rows as $row ) {
+				$ok = self::sync_request( $row );
+				if ( get_transient( 'cswa_merchant_quota_pause' ) || ( ! $ok && get_option( 'cswa_sheet_error' ) ) || microtime( true ) - $started > 15 ) { break; }
 			}
-		}
+		} finally { CSWA_Store::release_lock( 'cswa_queue_worker' ); }
 	}
 }

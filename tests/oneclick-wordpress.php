@@ -5,7 +5,7 @@ function oc_assert( $ok, $label ) { if ( ! $ok ) { throw new RuntimeException( $
 add_filter( 'pre_wp_mail', '__return_true' );
 add_filter( 'pre_http_request', static function() { return new WP_Error( 'ci_offline', 'External calls disabled.' ); } );
 wp_set_current_user( get_user_by( 'login', 'ci-admin' )->ID );
-$settings = array( 'site_mode' => 'marketplace', 'vendor_dashboard' => 0, 'country_code' => '243', 'whatsapp_number' => '243810000099', 'rate_limit' => 100 );
+$settings = array( 'site_mode' => 'marketplace', 'vendor_dashboard' => 0, 'country_code' => '243', 'whatsapp_number' => '243810000099', 'rate_limit' => 100, 'vendor_map' => 'CI Case Shop = 243810000011' );
 update_option( 'cswa_settings', $settings );
 register_post_type( 'wa-order-numbers', array( 'public' => false ) );
 function oc_record( $title, $phone, $status = 'publish' ) {
@@ -73,7 +73,6 @@ $settings['site_mode'] = 'single'; update_option( 'cswa_settings', $settings );
 oc_assign( $parent_id, 'CI nonexistent' );
 oc_assert( CSWA_Number::resolve( $parent_id, $vid, $phone )['number'] === $settings['whatsapp_number'] && CSWA_Number::vendor_name( $parent_id, $settings['whatsapp_number'], $vid ) === '', 'single-shop priority and display unchanged' );
 $settings['vendor_dashboard'] = 1; update_option( 'cswa_settings', $settings );
-$vendor = get_user_by( 'login', '243810000001' );
 // Use the approved account created by the account lifecycle CI scenario.
 $vendors = get_users( array( 'role' => 'cswa_vendor', 'meta_key' => '_cswa_whatsapp', 'meta_value' => '243810000001' ) );
 oc_assert( count( $vendors ) === 1, 'approved account fixture available' );
